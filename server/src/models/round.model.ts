@@ -31,6 +31,13 @@ export class Round extends Model<Round> {
   })
   status: string;
 
+  @Column({
+    type: DataType.INTEGER,
+    allowNull: false,
+    defaultValue: 0,
+  })
+  total_score: number;
+
   @HasMany(() => Score)
   scores: Score[];
 }

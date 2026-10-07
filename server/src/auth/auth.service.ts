@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -12,35 +12,41 @@ export class AuthService {
     private jwtService: JwtService,
   ) {}
 
+  resolveRole(username: string): string {
+    if (username === 'admin') {
+      return 'admin';
+    }
+    if (username === 'Никита') {
+      return 'nikita';
+    }
+    return 'user';
+  }
+
   async validateUser(username: string, password: string): Promise<IUserData | null> {
     const user = await this.userModel.findOne({
       where: { login: username },
     });
 
     if (user) {
-      // Пользователь существует - проверяем пароль
       if (await bcrypt.compare(password, user.password_hash)) {
         const { password_hash, ...result } = user.toJSON();
         return result;
       }
-      return null; // Неверный пароль
-    } else {
-      // Пользователь не существует - создаем нового
-      const saltRounds = 10;
-      const password_hash = await bcrypt.hash(password, saltRounds);
-      
-      // Определяем роль: nikita для пользователя Никита, user для остальных
-      const role = username === 'Никита' ? 'nikita' : 'user';
-      
-      const newUser = await this.userModel.create({
-        login: username,
-        password_hash,
-        role,
-      });
-
-      const { password_hash: _, ...result } = newUser.toJSON();
-      return result;
+      return null;
     }
+
+    const saltRounds = 10;
+    const password_hash = await bcrypt.hash(password, saltRounds);
+    const role = this.resolveRole(username);
+
+    const newUser = await this.userModel.create({
+      login: username,
+      password_hash,
+      role,
+    });
+
+    const { password_hash: _, ...result } = newUser.toJSON();
+    return result;
   }
 
   async login(user: IUserData) {

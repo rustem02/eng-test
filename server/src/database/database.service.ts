@@ -2,8 +2,6 @@ import { Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/sequelize';
 import { Sequelize } from 'sequelize-typescript';
 import { User } from '../models/user.model';
-import { Round } from '../models/round.model';
-import { Score } from '../models/score.model';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -15,14 +13,15 @@ export class DatabaseService implements OnModuleInit {
       await this.sequelize.authenticate();
       console.log('Database connection established successfully.');
 
-      // Check if users table exists
       const tableExists = await this.checkTableExists('users');
-      
+
       if (!tableExists) {
         console.log('Users table not found. Initializing database...');
         await this.initializeDatabase();
       } else {
         console.log('Database already initialized.');
+        // Keep schema in sync for iterative TASK changes (e.g. total_score)
+        await this.sequelize.sync({ alter: true });
       }
     } catch (error) {
       console.error('Unable to connect to the database:', error);
@@ -35,18 +34,16 @@ export class DatabaseService implements OnModuleInit {
       const queryInterface = this.sequelize.getQueryInterface();
       const tables = await queryInterface.showAllTables();
       return tables.includes(tableName);
-    } catch (error) {
+    } catch {
       return false;
     }
   }
 
   private async initializeDatabase() {
     try {
-      // Create all tables
       await this.sequelize.sync({ force: true });
       console.log('Database tables created successfully.');
 
-      // Create initial users
       await this.createInitialUsers();
       console.log('Initial users created successfully.');
     } catch (error) {
@@ -60,13 +57,13 @@ export class DatabaseService implements OnModuleInit {
       {
         login: 'roma',
         password: 'roma',
-        role: 'user'
+        role: 'user',
       },
       {
         login: 'admin',
         password: 'admin',
-        role: 'admin'
-      }
+        role: 'admin',
+      },
     ];
 
     for (const userData of users) {
@@ -74,7 +71,7 @@ export class DatabaseService implements OnModuleInit {
       await User.create({
         login: userData.login,
         password_hash,
-        role: userData.role
+        role: userData.role,
       });
     }
   }

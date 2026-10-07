@@ -3,12 +3,27 @@ import { useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import type { Round } from '../types/api';
 
+function getLifecycleStatus(round: Round, now: Date): string {
+  const start = new Date(round.start_datetime);
+  const end = new Date(round.end_datetime);
+  if (now < start) return 'Cooldown';
+  if (now > end) return 'Finished';
+  return 'Активен';
+}
+
 export const HomePage: React.FC = () => {
   const [rounds, setRounds] = useState<Round[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [creatingRound, setCreatingRound] = useState(false);
+  const [now, setNow] = useState(() => new Date());
   const navigate = useNavigate();
+  const user = apiService.decodeToken();
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     let initialFetch = true;
@@ -23,7 +38,6 @@ export const HomePage: React.FC = () => {
         setRounds(roundsData);
       } catch (err) {
         setError('Ошибка загрузки раундов');
-        // Если ошибка авторизации, перенаправляем на страницу входа
         if (err instanceof Error && err.message.includes('Authentication')) {
           apiService.removeToken();
           navigate('/auth');
@@ -34,11 +48,7 @@ export const HomePage: React.FC = () => {
     };
 
     fetchRounds();
-
-    // Устанавливаем интервал для обновления каждые 3 секунды
     const interval = setInterval(fetchRounds, 3000);
-
-    // Очищаем интервал при размонтировании компонента
     return () => clearInterval(interval);
   }, [navigate]);
 
@@ -51,10 +61,8 @@ export const HomePage: React.FC = () => {
     try {
       setCreatingRound(true);
       setError('');
-      await apiService.createRound();
-      // Обновляем список раундов
-      const roundsData = await apiService.getRounds();
-      setRounds(roundsData);
+      const round = await apiService.createRound();
+      navigate(`/round/${round.uuid}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка создания раунда');
     } finally {
@@ -66,37 +74,18 @@ export const HomePage: React.FC = () => {
     return new Date(date).toLocaleString('ru-RU');
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'active':
-        return '#28a745';
-      case 'completed':
-        return '#6c757d';
-      case 'pending':
-        return '#ffc107';
-      default:
-        return '#007bff';
-    }
-  };
-
-  const handleRoundClick = (uuid: string) => {
-    navigate(`/round/${uuid}`);
-  };
-
   if (loading) {
     return (
-      <div style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        minHeight: '100vh',
-        backgroundColor: '#f5f5f5'
-      }}>
-        <div style={{
-          textAlign: 'center',
-          fontSize: '1.2rem',
-          color: '#666'
-        }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: '100vh',
+          backgroundColor: '#f5f5f5',
+        }}
+      >
+        <div style={{ textAlign: 'center', fontSize: '1.2rem', color: '#666' }}>
           Загрузка раундов...
         </div>
       </div>
@@ -104,56 +93,35 @@ export const HomePage: React.FC = () => {
   }
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      backgroundColor: '#f5f5f5',
-      padding: '2rem'
-    }}>
-      <div style={{
-        maxWidth: '1200px',
-        margin: '0 auto'
-      }}>
-        <header style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '2rem',
-          backgroundColor: 'white',
-          padding: '1rem 2rem',
-          borderRadius: '8px',
-          boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
-        }}>
-          <h1 style={{ margin: 0, color: '#333' }}>
-            The Last of Guss
-          </h1>
-          <div style={{ display: 'flex', gap: '1rem' }}>
-            {apiService.isAdmin() && (
-              <button
-                onClick={handleCreateRound}
-                disabled={creatingRound}
-                style={{
-                  padding: '0.5rem 1rem',
-                  backgroundColor: creatingRound ? '#6c757d' : '#28a745',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: creatingRound ? 'not-allowed' : 'pointer',
-                  fontSize: '0.9rem'
-                }}
-              >
-                {creatingRound ? 'Создание...' : 'Создать раунд'}
-              </button>
-            )}
+    <div
+      style={{
+        minHeight: '100vh',
+        backgroundColor: '#f5f5f5',
+        padding: '1.5rem',
+      }}
+    >
+      <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+        <header
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '1.25rem',
+            border: '1px solid #333',
+            backgroundColor: 'white',
+            padding: '0.75rem 1rem',
+          }}
+        >
+          <h1 style={{ margin: 0, fontSize: '1.25rem' }}>Список РАУНДОВ</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <span>{user?.username ?? ''}</span>
             <button
               onClick={handleLogout}
               style={{
-                padding: '0.5rem 1rem',
-                backgroundColor: '#dc3545',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
+                padding: '0.35rem 0.75rem',
+                backgroundColor: 'white',
+                border: '1px solid #333',
                 cursor: 'pointer',
-                fontSize: '0.9rem'
               }}
             >
               Выйти
@@ -161,145 +129,71 @@ export const HomePage: React.FC = () => {
           </div>
         </header>
 
-        <div style={{
-          backgroundColor: 'white',
-          borderRadius: '8px',
-          boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-          overflow: 'hidden'
-        }}>
-          <div style={{
-            padding: '1.5rem 2rem',
-            borderBottom: '1px solid #eee'
-          }}>
-            <h2 style={{ margin: 0, color: '#333' }}>
-              Список раундов
-            </h2>
+        {apiService.isAdmin() && (
+          <div style={{ marginBottom: '1rem' }}>
+            <button
+              onClick={handleCreateRound}
+              disabled={creatingRound}
+              style={{
+                padding: '0.6rem 1rem',
+                backgroundColor: 'white',
+                border: '1px solid #333',
+                cursor: creatingRound ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {creatingRound ? 'Создание...' : 'Создать раунд'}
+            </button>
           </div>
+        )}
 
-          {error && (
-            <div style={{
-              padding: '1rem 2rem',
-              backgroundColor: '#f8d7da',
+        {error && (
+          <div
+            style={{
+              marginBottom: '1rem',
+              padding: '0.75rem',
+              border: '1px solid #c00',
               color: '#721c24',
-              borderBottom: '1px solid #f5c6cb'
-            }}>
-              {error}
-            </div>
-          )}
+              backgroundColor: '#f8d7da',
+            }}
+          >
+            {error}
+          </div>
+        )}
 
-          {rounds.length === 0 ? (
-            <div style={{
-              padding: '3rem 2rem',
-              textAlign: 'center',
-              color: '#666'
-            }}>
-              Раунды не найдены
-            </div>
-          ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{
-                width: '100%',
-                borderCollapse: 'collapse'
-              }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#f8f9fa' }}>
-                    <th style={{
-                      padding: '1rem',
-                      textAlign: 'left',
-                      borderBottom: '1px solid #dee2e6',
-                      fontWeight: '600',
-                      color: '#495057'
-                    }}>
-                      ID
-                    </th>
-                    <th style={{
-                      padding: '1rem',
-                      textAlign: 'left',
-                      borderBottom: '1px solid #dee2e6',
-                      fontWeight: '600',
-                      color: '#495057'
-                    }}>
-                      Статус
-                    </th>
-                    <th style={{
-                      padding: '1rem',
-                      textAlign: 'left',
-                      borderBottom: '1px solid #dee2e6',
-                      fontWeight: '600',
-                      color: '#495057'
-                    }}>
-                      Начало
-                    </th>
-                    <th style={{
-                      padding: '1rem',
-                      textAlign: 'left',
-                      borderBottom: '1px solid #dee2e6',
-                      fontWeight: '600',
-                      color: '#495057'
-                    }}>
-                      Конец
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rounds.map((round) => (
-                    <tr 
-                      key={round.uuid} 
-                      onClick={() => handleRoundClick(round.uuid)}
-                      style={{
-                        borderBottom: '1px solid #dee2e6',
-                        cursor: 'pointer',
-                        transition: 'background-color 0.2s'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = '#f8f9fa';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'transparent';
-                      }}
-                    >
-                      <td style={{
-                        padding: '1rem',
-                        fontFamily: 'monospace',
-                        fontSize: '0.9rem',
-                        color: '#666'
-                      }}>
-                        {round.uuid.slice(0, 8)}...
-                      </td>
-                      <td style={{ padding: '1rem' }}>
-                        <span style={{
-                          display: 'inline-block',
-                          padding: '0.25rem 0.5rem',
-                          borderRadius: '12px',
-                          fontSize: '0.8rem',
-                          fontWeight: '500',
-                          backgroundColor: getStatusColor(round.status),
-                          color: 'white'
-                        }}>
-                          {round.status}
-                        </span>
-                      </td>
-                      <td style={{
-                        padding: '1rem',
-                        fontSize: '0.9rem',
-                        color: '#666'
-                      }}>
-                        {formatDate(round.start_datetime)}
-                      </td>
-                      <td style={{
-                        padding: '1rem',
-                        fontSize: '0.9rem',
-                        color: '#666'
-                      }}>
-                        {round.end_datetime ? formatDate(round.end_datetime) : '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+        {rounds.length === 0 ? (
+          <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
+            Раунды не найдены
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {rounds.map((round) => {
+              const status = getLifecycleStatus(round, now);
+              return (
+                <div
+                  key={round.uuid}
+                  onClick={() => navigate(`/round/${round.uuid}`)}
+                  style={{
+                    border: '1px solid #333',
+                    backgroundColor: 'white',
+                    padding: '1rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <div style={{ marginBottom: '0.75rem' }}>
+                    ● Round ID:{' '}
+                    <span style={{ textDecoration: 'underline' }}>
+                      {round.uuid}
+                    </span>
+                  </div>
+                  <div>Start: {formatDate(round.start_datetime)}</div>
+                  <div>End: {formatDate(round.end_datetime)}</div>
+                  <hr style={{ margin: '0.75rem 0', borderColor: '#999' }} />
+                  <div>Статус: {status}</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
